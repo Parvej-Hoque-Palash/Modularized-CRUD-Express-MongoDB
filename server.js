@@ -4,6 +4,8 @@ const app = express();
 const bodyParser = require("body-parser");
 const nodemon = require("nodemon");
 const mongoose = require("mongoose");
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 app.use(bodyParser.json());
 
@@ -26,12 +28,13 @@ const userSchema = new mongoose.Schema(
     fname: String,
     lname: String,
     email: String,
-    age: Number,
+    password: String,
+    age: Number
   },
   {
-    timestamps: true,
+    timestamps: true
   }
-);
+)
 
 const User = mongoose.model("User", userSchema);
 
@@ -43,7 +46,17 @@ app.get("/", (req, res) => {
 //API to create user
 app.post("/users", async (req, res) => {
   try {
-    const user = new User(req.body);
+    const salt = await bcrypt.genSalt(10)
+    const hash = await bcrypt.hash(req.body.password, salt)
+    const password = hash
+    const userObj = {
+      fname: req.body.fname,
+      lname: req.body.lname,
+      email: req.body.email,
+      age: req.body.age,
+      password: password
+    }
+    const user = new User(userObj)
     await user.save();
     res.status(201).json(user);
   } catch (error) {
@@ -51,6 +64,28 @@ app.post("/users", async (req, res) => {
     res.status(500).json({ message: "Something is wrong" });
   }
 });
+
+app.post('/users/login', async (req, res) => {
+  try {
+    const {email, password} = req.body
+    const user = await User.findOne({email: email})
+    //Checking if user email is valid
+    if(!user){
+      res.status(401).json({ message: "User not found" });
+    }else{
+      //Checking if user password is valid
+      const isValidPassword = await bcrypt.compare(password, user.password)
+      if(!isValidPassword){
+        res.status(401).json({ message: "Wrong Password!" });
+      }else{
+        res.status(200).json(user);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Something is wrong" });
+  }
+})
 
 //API to get users
 app.get("/users", async (req, res) => {
